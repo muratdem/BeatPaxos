@@ -1,0 +1,1713 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BeatPaxos - Can You Break Consensus?</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background: #0a0a1a;
+  color: #d0d0e0;
+  height: 100vh;
+  overflow: hidden;
+  user-select: none;
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+/* ===== HEADER ===== */
+header {
+  background: linear-gradient(135deg, #12122a 0%, #1a1a3e 100%);
+  border-bottom: 1px solid #2a2a4a;
+  padding: 10px 24px;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  flex-shrink: 0;
+}
+
+header h1 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  background: linear-gradient(90deg, #e74c3c, #2ecc71, #3498db);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+header .subtitle {
+  font-size: 0.85rem;
+  color: #888;
+  font-style: italic;
+}
+
+.header-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
+}
+
+.header-controls button {
+  background: #2a2a4a;
+  color: #d0d0e0;
+  border: 1px solid #3a3a5a;
+  padding: 6px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: all 0.2s;
+}
+
+.header-controls button:hover {
+  background: #3a3a5a;
+  border-color: #5a5a7a;
+}
+
+.header-controls button.primary {
+  background: #2ecc71;
+  color: #0a0a1a;
+  border-color: #2ecc71;
+  font-weight: 600;
+}
+
+.header-controls button.primary:hover {
+  background: #27ae60;
+}
+
+.speed-control {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  color: #888;
+}
+
+.speed-control button {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+}
+
+.speed-display {
+  min-width: 30px;
+  text-align: center;
+  color: #d0d0e0;
+  font-weight: 600;
+}
+
+.round-info {
+  font-size: 0.85rem;
+  color: #888;
+}
+
+.round-info span {
+  color: #d0d0e0;
+  font-weight: 600;
+}
+
+.score-info {
+  font-size: 0.85rem;
+  color: #888;
+}
+
+.score-info span {
+  color: #ffb347;
+  font-weight: 600;
+}
+
+.score-info .top-score {
+  color: #ff6b6b;
+}
+
+/* ===== MAIN LAYOUT ===== */
+#main {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+#gameArea {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+  min-width: 0;
+}
+
+/* ===== NODES ROW ===== */
+#nodesRow {
+  display: flex;
+  justify-content: space-around;
+  padding: 0 20px;
+  margin-bottom: 8px;
+  flex-shrink: 0;
+}
+
+.node-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 30%;
+}
+
+.crown {
+  font-size: 2rem;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.3s, transform 0.3s;
+  transform: scale(0.5);
+}
+
+.crown.visible {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.node-box {
+  width: 100%;
+  max-width: 180px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.3s;
+  position: relative;
+  overflow: hidden;
+}
+
+.node-box::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 14px;
+  border: 2px solid currentColor;
+  opacity: 0.4;
+}
+
+.node-box.node-red {
+  background: rgba(231, 76, 60, 0.15);
+  color: #e74c3c;
+  box-shadow: 0 0 20px rgba(231, 76, 60, 0.1);
+}
+
+.node-box.node-green {
+  background: rgba(46, 204, 113, 0.15);
+  color: #2ecc71;
+  box-shadow: 0 0 20px rgba(46, 204, 113, 0.1);
+}
+
+.node-box.node-blue {
+  background: rgba(52, 152, 219, 0.15);
+  color: #3498db;
+  box-shadow: 0 0 20px rgba(52, 152, 219, 0.1);
+}
+
+.node-box.dead {
+  opacity: 0.35;
+  filter: grayscale(0.7);
+}
+
+.node-box.delayed {
+  animation: pulse-delay 0.8s ease-in-out infinite;
+}
+
+@keyframes pulse-delay {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.node-name {
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.node-info {
+  font-size: 0.75rem;
+  opacity: 0.8;
+  line-height: 1.4;
+}
+
+.node-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2.5rem;
+  background: rgba(0, 0, 0, 0.5);
+  border-radius: 14px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s;
+}
+
+.node-overlay.visible {
+  opacity: 1;
+}
+
+/* ===== ANIMATION AREA ===== */
+#animArea {
+  position: relative;
+  height: 120px;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.flying-msg {
+  position: absolute;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  white-space: nowrap;
+  pointer-events: none;
+  transform: translateX(-50%);
+  z-index: 10;
+  transition: opacity 0.2s;
+}
+
+.flying-msg.msg-red { background: rgba(231, 76, 60, 0.9); color: #fff; }
+.flying-msg.msg-green { background: rgba(46, 204, 113, 0.9); color: #fff; }
+.flying-msg.msg-blue { background: rgba(52, 152, 219, 0.9); color: #fff; }
+
+.flying-msg.dropped {
+  opacity: 0.3;
+  text-decoration: line-through;
+}
+
+/* Column guide lines */
+.col-guide {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+/* ===== LOG LANES ===== */
+#logsRow {
+  display: flex;
+  flex: 1;
+  gap: 8px;
+  padding: 0 20px;
+  min-height: 0;
+}
+
+.log-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.log-header {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 6px 10px;
+  border-radius: 8px 8px 0 0;
+  text-align: center;
+}
+
+.log-header.log-red { background: rgba(231, 76, 60, 0.2); color: #e74c3c; }
+.log-header.log-green { background: rgba(46, 204, 113, 0.2); color: #2ecc71; }
+.log-header.log-blue { background: rgba(52, 152, 219, 0.2); color: #3498db; }
+
+.log-content {
+  flex: 1;
+  overflow-y: auto;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 0 0 8px 8px;
+  padding: 6px;
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 0.72rem;
+  line-height: 1.6;
+}
+
+.log-entry {
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin-bottom: 2px;
+  animation: fadeIn 0.3s;
+}
+
+.log-entry.log-red { color: #ff8a80; }
+.log-entry.log-green { color: #80ffb0; }
+.log-entry.log-blue { color: #80b5ff; }
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.log-content::-webkit-scrollbar { width: 4px; }
+.log-content::-webkit-scrollbar-track { background: transparent; }
+.log-content::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+
+/* ===== SIDE PANEL ===== */
+#sidePanel {
+  width: 300px;
+  flex-shrink: 0;
+  background: linear-gradient(180deg, #12122a 0%, #0e0e20 100%);
+  border-left: 1px solid #2a2a4a;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.panel-section {
+  padding: 14px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.panel-section h3 {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #888;
+  margin-bottom: 8px;
+}
+
+.mission-text {
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.mission-text strong {
+  color: #ff6b6b;
+}
+
+.controls-list {
+  font-size: 0.8rem;
+  line-height: 1.8;
+}
+
+.controls-list .key {
+  display: inline-block;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 1px 8px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  margin-right: 4px;
+}
+
+.protocol-ref {
+  font-size: 0.78rem;
+  line-height: 1.6;
+}
+
+.protocol-ref .phase {
+  font-weight: 600;
+  margin-top: 6px;
+  display: block;
+}
+
+.protocol-ref .phase:first-child { margin-top: 0; }
+
+.protocol-ref .msg-type {
+  font-family: 'SF Mono', monospace;
+  font-weight: 600;
+}
+
+.protocol-ref .msg-red { color: #ff8a80; }
+.protocol-ref .msg-green { color: #80ffb0; }
+.protocol-ref .msg-blue { color: #80b5ff; }
+
+/* Safety section */
+.safety-status {
+  padding: 10px 14px;
+  border-radius: 10px;
+  margin-bottom: 10px;
+  font-weight: 700;
+  font-size: 0.95rem;
+  text-align: center;
+}
+
+.safety-status.safe {
+  background: rgba(46, 204, 113, 0.15);
+  color: #2ecc71;
+  border: 1px solid rgba(46, 204, 113, 0.3);
+}
+
+.safety-status.violated {
+  background: rgba(231, 76, 60, 0.15);
+  color: #e74c3c;
+  border: 1px solid rgba(231, 76, 60, 0.3);
+  animation: pulse-violation 0.5s ease-in-out infinite;
+}
+
+@keyframes pulse-violation {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.03); }
+}
+
+.safety-invariant {
+  font-size: 0.78rem;
+  color: #888;
+  font-style: italic;
+  margin-bottom: 8px;
+}
+
+.decided-list {
+  font-size: 0.8rem;
+  line-height: 1.6;
+}
+
+.decided-item {
+  padding: 3px 8px;
+  border-radius: 4px;
+  margin-bottom: 3px;
+}
+
+/* Event log */
+.event-log-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+#eventLog {
+  flex: 1;
+  overflow-y: auto;
+  font-size: 0.75rem;
+  line-height: 1.6;
+  padding-right: 4px;
+}
+
+#eventLog::-webkit-scrollbar { width: 4px; }
+#eventLog::-webkit-scrollbar-track { background: transparent; }
+#eventLog::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+
+.event-entry {
+  padding: 2px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+  animation: fadeIn 0.3s;
+}
+
+.event-entry .time {
+  color: #555;
+  font-family: monospace;
+  margin-right: 6px;
+}
+
+/* Welcome overlay */
+#welcomeOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 10, 26, 0.92);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  backdrop-filter: blur(8px);
+}
+
+.welcome-card {
+  background: #1a1a3e;
+  border: 1px solid #3a3a5a;
+  border-radius: 20px;
+  padding: 40px;
+  max-width: 520px;
+  text-align: center;
+}
+
+.welcome-card h2 {
+  font-size: 2rem;
+  margin-bottom: 8px;
+  background: linear-gradient(90deg, #e74c3c, #2ecc71, #3498db);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.welcome-card .tagline {
+  font-size: 1rem;
+  color: #888;
+  margin-bottom: 24px;
+}
+
+.welcome-card p {
+  font-size: 0.9rem;
+  line-height: 1.7;
+  color: #aaa;
+  margin-bottom: 12px;
+  text-align: left;
+}
+
+.welcome-card .start-btn {
+  margin-top: 20px;
+  padding: 12px 40px;
+  font-size: 1.1rem;
+  background: linear-gradient(135deg, #2ecc71, #27ae60);
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  font-weight: 700;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.welcome-card .start-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(46, 204, 113, 0.3);
+}
+
+/* Round banner */
+#roundBanner {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(0.8);
+  background: rgba(26, 26, 62, 0.95);
+  border: 2px solid #3a3a5a;
+  border-radius: 20px;
+  padding: 30px 50px;
+  text-align: center;
+  z-index: 50;
+  opacity: 0;
+  pointer-events: none;
+  transition: all 0.5s;
+  backdrop-filter: blur(8px);
+}
+
+#roundBanner.visible {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+}
+
+#roundBanner h2 {
+  font-size: 1.4rem;
+  margin-bottom: 6px;
+}
+
+#roundBanner .decided-value {
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+/* Notification toast */
+.toast {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  background: rgba(231, 76, 60, 0.9);
+  color: #fff;
+  padding: 10px 24px;
+  border-radius: 10px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  opacity: 0;
+  transition: all 0.3s;
+  z-index: 200;
+  pointer-events: none;
+}
+
+.toast.visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* Responsive */
+@media (max-width: 900px) {
+  #sidePanel { width: 240px; }
+  .node-box { max-width: 140px; padding: 10px 12px; }
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <!-- Header -->
+  <header>
+    <div>
+      <h1>BeatPaxos</h1>
+      <div class="subtitle">Can you make Paxos violate safety?</div>
+    </div>
+    <div class="header-controls">
+      <div class="round-info">Round: <span id="roundNum">0</span></div>
+      <div class="score-info">Score: <span id="roundScoreDisplay">0</span> | Best: <span id="topScoreDisplay">0</span></div>
+      <div class="speed-control">
+        Speed:
+        <button id="speedDown">&#9664;</button>
+        <span class="speed-display" id="speedDisplay">1x</span>
+        <button id="speedUp">&#9654;</button>
+      </div>
+      <button id="resetBtn">Reset</button>
+    </div>
+  </header>
+
+  <!-- Main -->
+  <div id="main">
+    <div id="gameArea">
+      <div id="nodesRow"></div>
+      <div id="animArea"></div>
+      <div id="logsRow"></div>
+    </div>
+    <div id="sidePanel">
+      <!-- Mission -->
+      <div class="panel-section">
+        <h3>Mission</h3>
+        <div class="mission-text">
+          <strong>Break consensus!</strong> Make two nodes decide different values. Paxos claims this is impossible &mdash; prove it wrong!
+        </div>
+      </div>
+
+      <!-- Controls -->
+      <div class="panel-section">
+        <h3>Controls</h3>
+        <div class="controls-list">
+          <span class="key">Double-click</span> Kill / recover a node<br>
+          <span class="key">Click &amp; hold</span> Delay a node's messages<br>
+          <em style="font-size:0.75rem;color:#666;">Only one node can be down at a time.</em>
+        </div>
+      </div>
+
+      <!-- Protocol -->
+      <div class="panel-section">
+        <h3>Paxos Protocol</h3>
+        <div class="protocol-ref">
+          <span class="phase">Phase 1 &mdash; Prepare</span>
+          <span class="msg-type">p1a</span>(ballot): "I want to lead with ballot B"<br>
+          <span class="msg-type">p1b</span>(ballot, accepted): "I promise. Here's what I accepted."
+          <span class="phase">Phase 2 &mdash; Accept</span>
+          <span class="msg-type">p2a</span>(value, ballot): "Accept this value at ballot B"<br>
+          <span class="msg-type">p2b</span>(ballot): "Accepted!"
+          <span class="phase">Phase 3 &mdash; Decision</span>
+          <span class="msg-type">p3</span>(value): "Value V is decided!"
+        </div>
+      </div>
+
+      <!-- Safety -->
+      <div class="panel-section">
+        <h3>Safety Invariant</h3>
+        <div class="safety-invariant">
+          "If a value is decided, no different value can ever be decided."
+        </div>
+        <div id="safetyStatus" class="safety-status safe">SAFETY HOLDS</div>
+        <div id="decidedList" class="decided-list"></div>
+      </div>
+
+      <!-- Event Log -->
+      <div class="panel-section event-log-section">
+        <h3>Event Log</h3>
+        <div id="eventLog"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Welcome overlay -->
+  <div id="welcomeOverlay">
+    <div class="welcome-card">
+      <h2>BeatPaxos</h2>
+      <div class="tagline">Can you break the consensus protocol?</div>
+      <p>
+        Three nodes &mdash; <span style="color:#e74c3c;font-weight:600">Red</span>,
+        <span style="color:#2ecc71;font-weight:600">Green</span>, and
+        <span style="color:#3498db;font-weight:600">Blue</span> &mdash;
+        are running the Paxos consensus protocol. Each wants to decide its own color as the value.
+      </p>
+      <p>
+        Your goal: <strong style="color:#ff6b6b;">make two nodes decide different values</strong>.
+        Kill nodes, delay messages, cause chaos. But Paxos guarantees safety...
+      </p>
+      <p>
+        <strong>Double-click</strong> a node to kill/recover it (only one can be down at a time).<br>
+        <strong>Click &amp; hold</strong> a node to delay its messages.
+      </p>
+      <button class="start-btn" id="startBtn">Start Game</button>
+    </div>
+  </div>
+
+  <!-- Round banner -->
+  <div id="roundBanner">
+    <h2 id="bannerTitle"></h2>
+    <div class="decided-value" id="bannerValue"></div>
+    <div class="banner-score" id="bannerScore" style="margin-top:8px;font-size:0.9rem;color:#ffb347;"></div>
+  </div>
+
+  <!-- Toast notification -->
+  <div class="toast" id="toast"></div>
+</div>
+
+<script>
+// ============================================================
+// CONFIGURATION
+// ============================================================
+const NODE_CONFIGS = [
+  { name: 'Red',   color: '#e74c3c', light: '#ff8a80', value: 'red',   cssClass: 'node-red',   msgClass: 'msg-red',   logClass: 'log-red'   },
+  { name: 'Green', color: '#2ecc71', light: '#80ffb0', value: 'green', cssClass: 'node-green', msgClass: 'msg-green', logClass: 'log-green' },
+  { name: 'Blue',  color: '#3498db', light: '#80b5ff', value: 'blue',  cssClass: 'node-blue',  msgClass: 'msg-blue',  logClass: 'log-blue'  },
+];
+
+const TRAVEL_TIME = 5000;       // ms for message to fly
+const PROCESS_DELAY = 1500;     // ms before node responds
+const TIMEOUT_MIN = 30000;
+const TIMEOUT_MAX = 54000;
+const ROUND_END_DELAY = 6000;
+const MAJORITY = 2;             // out of 3
+
+// ============================================================
+// GAME STATE
+// ============================================================
+let nodes = [];
+let inflightMessages = [];
+let pendingActions = [];
+let gameTime = 0;
+let lastTimestamp = null;
+let speed = 1;
+let running = false;
+let roundNum = 0;
+let roundDecidedValue = null;
+let roundEndTime = null;
+let safetyViolated = false;
+let msgIdCounter = 0;
+let bannerTimeout = null;
+let roundMsgCount = 0;
+let roundScore = 0;
+let topScore = 0;
+
+// ============================================================
+// DOM REFERENCES
+// ============================================================
+const dom = {};
+
+// ============================================================
+// NODE CLASS
+// ============================================================
+function createNode(id) {
+  return {
+    id,
+    promisedBallot: 0,
+    acceptedBallot: 0,
+    acceptedValue: null,
+    phase: 'IDLE',
+    myBallot: 0,
+    p1bResponses: [],
+    p1bFrom: new Set(),
+    p2bFrom: new Set(),
+    decidedValue: null,
+    alive: true,
+    delayed: false,
+    messageBuffer: [],
+    timeoutTimer: 0,
+    timeoutThreshold: randomTimeout(),
+  };
+}
+
+function resetNode(node) {
+  node.promisedBallot = 0;
+  node.acceptedBallot = 0;
+  node.acceptedValue = null;
+  node.phase = 'IDLE';
+  node.myBallot = 0;
+  node.p1bResponses = [];
+  node.p1bFrom = new Set();
+  node.p2bFrom = new Set();
+  node.decidedValue = null;
+  node.alive = true;
+  node.delayed = false;
+  node.messageBuffer = [];
+  node.timeoutTimer = 0;
+  node.timeoutThreshold = randomTimeout();
+}
+
+// ============================================================
+// UTILITIES
+// ============================================================
+function randomTimeout() {
+  return TIMEOUT_MIN + Math.random() * (TIMEOUT_MAX - TIMEOUT_MIN);
+}
+
+function nextBallot(node) {
+  let b = node.id + 1;
+  const highest = Math.max(node.promisedBallot, node.myBallot);
+  while (b <= highest) b += 3;
+  return b;
+}
+
+function ballotOwner(ballot) {
+  // Red uses 1,4,7..., Green 2,5,8..., Blue 3,6,9...
+  return (ballot - 1) % 3;
+}
+
+function getColumnCenterPct(nodeId) {
+  return (nodeId + 0.5) * 33.333;
+}
+
+function lerp(a, b, t) {
+  return a + (b - a) * t;
+}
+
+function easeInOut(t) {
+  return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+}
+
+function formatValue(v) {
+  return v ? '"' + v + '"' : '\u22A5';
+}
+
+function formatTime(t) {
+  return (t / 1000).toFixed(1) + 's';
+}
+
+function formatMsgShort(msg) {
+  switch (msg.type) {
+    case 'p1a': return `p1a(${msg.ballot})`;
+    case 'p1b': return `p1b(${msg.ballot},${formatValue(msg.accValue)})`;
+    case 'p2a': return `p2a(${formatValue(msg.value)},${msg.ballot})`;
+    case 'p2b': return `p2b(${msg.ballot})`;
+    case 'p3':  return `p3(${formatValue(msg.value)})`;
+  }
+  return msg.type;
+}
+
+function formatMsgForLane(msg) {
+  const toName = NODE_CONFIGS[msg.to].name;
+  return `${formatMsgShort(msg)} \u2192 ${toName}`;
+}
+
+// ============================================================
+// BUILD UI
+// ============================================================
+function buildUI() {
+  const nodesRow = document.getElementById('nodesRow');
+  const logsRow = document.getElementById('logsRow');
+  const animArea = document.getElementById('animArea');
+
+  dom.nodeBoxes = [];
+  dom.crowns = [];
+  dom.overlays = [];
+  dom.nodeInfos = [];
+  dom.logContents = [];
+
+  for (let i = 0; i < 3; i++) {
+    const cfg = NODE_CONFIGS[i];
+
+    // Node column
+    const col = document.createElement('div');
+    col.className = 'node-col';
+
+    const crown = document.createElement('div');
+    crown.className = 'crown';
+    crown.textContent = '\uD83D\uDC51';
+
+    const box = document.createElement('div');
+    box.className = `node-box ${cfg.cssClass}`;
+
+    const name = document.createElement('div');
+    name.className = 'node-name';
+    name.textContent = cfg.name;
+
+    const info = document.createElement('div');
+    info.className = 'node-info';
+    info.textContent = 'Idle';
+
+    const overlay = document.createElement('div');
+    overlay.className = 'node-overlay';
+    overlay.textContent = '\uD83D\uDC80';
+
+    box.appendChild(name);
+    box.appendChild(info);
+    box.appendChild(overlay);
+    col.appendChild(crown);
+    col.appendChild(box);
+    nodesRow.appendChild(col);
+
+    dom.nodeBoxes.push(box);
+    dom.crowns.push(crown);
+    dom.overlays.push(overlay);
+    dom.nodeInfos.push(info);
+
+    // Event listeners for player interaction
+    setupNodeInteraction(box, i);
+
+    // Log column
+    const logCol = document.createElement('div');
+    logCol.className = 'log-col';
+
+    const logHeader = document.createElement('div');
+    logHeader.className = `log-header ${cfg.logClass}`;
+    logHeader.textContent = `${cfg.name}'s Messages`;
+
+    const logContent = document.createElement('div');
+    logContent.className = 'log-content';
+
+    logCol.appendChild(logHeader);
+    logCol.appendChild(logContent);
+    logsRow.appendChild(logCol);
+
+    dom.logContents.push(logContent);
+  }
+
+  // Column guide lines in anim area
+  for (let i = 0; i < 3; i++) {
+    const guide = document.createElement('div');
+    guide.className = 'col-guide';
+    guide.style.left = getColumnCenterPct(i) + '%';
+    animArea.appendChild(guide);
+  }
+
+  dom.animArea = animArea;
+  dom.roundNum = document.getElementById('roundNum');
+  dom.speedDisplay = document.getElementById('speedDisplay');
+  dom.safetyStatus = document.getElementById('safetyStatus');
+  dom.decidedList = document.getElementById('decidedList');
+  dom.eventLog = document.getElementById('eventLog');
+  dom.roundBanner = document.getElementById('roundBanner');
+  dom.bannerTitle = document.getElementById('bannerTitle');
+  dom.bannerValue = document.getElementById('bannerValue');
+  dom.bannerScore = document.getElementById('bannerScore');
+  dom.toast = document.getElementById('toast');
+  dom.welcomeOverlay = document.getElementById('welcomeOverlay');
+  dom.roundScoreDisplay = document.getElementById('roundScoreDisplay');
+  dom.topScoreDisplay = document.getElementById('topScoreDisplay');
+}
+
+// ============================================================
+// PLAYER INTERACTION
+// ============================================================
+function setupNodeInteraction(box, nodeId) {
+  let holdTimer = null;
+  let isHolding = false;
+
+  box.addEventListener('dblclick', (e) => {
+    e.preventDefault();
+    if (isHolding) return;
+    toggleNodeAlive(nodeId);
+  });
+
+  box.addEventListener('mousedown', (e) => {
+    if (e.detail >= 2) return; // part of double-click
+    holdTimer = setTimeout(() => {
+      isHolding = true;
+      delayNode(nodeId);
+    }, 400);
+  });
+
+  box.addEventListener('mouseup', () => {
+    clearTimeout(holdTimer);
+    if (isHolding) {
+      isHolding = false;
+      undelayNode(nodeId);
+    }
+  });
+
+  box.addEventListener('mouseleave', () => {
+    clearTimeout(holdTimer);
+    if (isHolding) {
+      isHolding = false;
+      undelayNode(nodeId);
+    }
+  });
+
+  // Touch support
+  box.addEventListener('touchstart', (e) => {
+    holdTimer = setTimeout(() => {
+      isHolding = true;
+      delayNode(nodeId);
+    }, 400);
+  });
+
+  box.addEventListener('touchend', (e) => {
+    clearTimeout(holdTimer);
+    if (isHolding) {
+      isHolding = false;
+      undelayNode(nodeId);
+    }
+  });
+}
+
+function toggleNodeAlive(nodeId) {
+  if (!running) return;
+  const node = nodes[nodeId];
+
+  if (!node.alive) {
+    // Recover
+    node.alive = true;
+    node.timeoutTimer = 0;
+    node.timeoutThreshold = randomTimeout();
+    addEvent(`${NODE_CONFIGS[nodeId].name} recovered!`);
+  } else {
+    // Kill - but only if no other node is dead
+    const anyDead = nodes.some((n, i) => i !== nodeId && !n.alive);
+    if (anyDead) {
+      showToast('Another node is already down! Recover it first.');
+      return;
+    }
+    node.alive = false;
+    node.delayed = false;
+    // If this node was leading/preparing, it loses that
+    if (node.phase === 'LEADING') node.phase = 'IDLE';
+    if (node.phase === 'PREPARING') node.phase = 'IDLE';
+    addEvent(`${NODE_CONFIGS[nodeId].name} killed!`);
+  }
+}
+
+function delayNode(nodeId) {
+  if (!running) return;
+  const node = nodes[nodeId];
+  if (!node.alive) return;
+  node.delayed = true;
+  addEvent(`${NODE_CONFIGS[nodeId].name} is being delayed...`);
+}
+
+function undelayNode(nodeId) {
+  const node = nodes[nodeId];
+  if (!node.delayed) return;
+  node.delayed = false;
+  addEvent(`${NODE_CONFIGS[nodeId].name} released.`);
+  // Process buffered messages
+  const buffer = [...node.messageBuffer];
+  node.messageBuffer = [];
+  for (const msg of buffer) {
+    processMessage(msg);
+  }
+}
+
+function showToast(text) {
+  dom.toast.textContent = text;
+  dom.toast.classList.add('visible');
+  setTimeout(() => dom.toast.classList.remove('visible'), 2500);
+}
+
+// ============================================================
+// PAXOS PROTOCOL
+// ============================================================
+function startProposal(nodeId) {
+  const node = nodes[nodeId];
+  if (!node.alive || node.delayed || node.phase === 'DECIDED') return;
+
+  node.myBallot = nextBallot(node);
+  node.phase = 'PREPARING';
+  node.p1bResponses = [];
+  node.p1bFrom = new Set();
+  node.p2bFrom = new Set();
+  node.promisedBallot = Math.max(node.promisedBallot, node.myBallot);
+  node.timeoutTimer = 0;
+  node.timeoutThreshold = randomTimeout();
+
+  addEvent(`${NODE_CONFIGS[nodeId].name} starts proposal with ballot ${node.myBallot}`);
+
+  for (let i = 0; i < 3; i++) {
+    if (i !== nodeId) {
+      sendMessage('p1a', nodeId, i, node.myBallot);
+    }
+  }
+}
+
+function processMessage(msg) {
+  const target = nodes[msg.to];
+  if (!target.alive) return;
+  if (target.delayed) {
+    target.messageBuffer.push(msg);
+    return;
+  }
+
+  switch (msg.type) {
+    case 'p1a': handleP1a(msg); break;
+    case 'p1b': handleP1b(msg); break;
+    case 'p2a': handleP2a(msg); break;
+    case 'p2b': handleP2b(msg); break;
+    case 'p3':  handleP3(msg); break;
+  }
+}
+
+function handleP1a(msg) {
+  const node = nodes[msg.to];
+
+  if (msg.ballot > node.promisedBallot) {
+    node.promisedBallot = msg.ballot;
+
+    // Step down if we were proposing with a lower ballot
+    if ((node.phase === 'LEADING' || node.phase === 'PREPARING') && node.myBallot < msg.ballot) {
+      addEvent(`${NODE_CONFIGS[msg.to].name} steps down (saw ballot ${msg.ballot})`);
+      node.phase = 'IDLE';
+      node.timeoutTimer = 0;
+      node.timeoutThreshold = randomTimeout();
+    }
+
+    // Reset timeout - we heard from a proposer
+    node.timeoutTimer = 0;
+    node.timeoutThreshold = randomTimeout();
+
+    addEvent(`${NODE_CONFIGS[msg.to].name} promises ballot ${msg.ballot}`);
+
+    // Respond with p1b after process delay
+    scheduleSend('p1b', msg.to, msg.from, msg.ballot, null, node.acceptedBallot, node.acceptedValue);
+  } else {
+    addEvent(`${NODE_CONFIGS[msg.to].name} rejects p1a(${msg.ballot}) \u2014 already promised ${node.promisedBallot}`);
+  }
+}
+
+function handleP1b(msg) {
+  const node = nodes[msg.to];
+  if (node.phase !== 'PREPARING' || msg.ballot !== node.myBallot) return;
+  if (node.p1bFrom.has(msg.from)) return;
+
+  node.p1bFrom.add(msg.from);
+  node.p1bResponses.push({
+    accBallot: msg.accBallot || 0,
+    accValue: msg.accValue || null,
+    from: msg.from,
+  });
+
+  // Check majority: self + responses
+  if (node.p1bResponses.length + 1 >= MAJORITY) {
+    // Find highest accepted value among all (self + responders)
+    let highestBallot = node.acceptedBallot;
+    let valueToPropose = node.acceptedValue;
+
+    for (const resp of node.p1bResponses) {
+      if (resp.accBallot > highestBallot) {
+        highestBallot = resp.accBallot;
+        valueToPropose = resp.accValue;
+      }
+    }
+
+    // If no previously accepted value, use preferred value
+    if (!valueToPropose) {
+      valueToPropose = NODE_CONFIGS[msg.to].value;
+    }
+
+    node.phase = 'LEADING';
+    node.acceptedBallot = node.myBallot;
+    node.acceptedValue = valueToPropose;
+    node.p2bFrom = new Set();
+
+    addEvent(`${NODE_CONFIGS[msg.to].name} becomes leader (ballot ${node.myBallot}), proposing "${valueToPropose}"`);
+
+    // Send p2a to all others
+    for (let i = 0; i < 3; i++) {
+      if (i !== msg.to) {
+        scheduleSend('p2a', msg.to, i, node.myBallot, valueToPropose);
+      }
+    }
+  }
+}
+
+function handleP2a(msg) {
+  const node = nodes[msg.to];
+
+  if (msg.ballot >= node.promisedBallot) {
+    node.promisedBallot = msg.ballot;
+    node.acceptedBallot = msg.ballot;
+    node.acceptedValue = msg.value;
+    node.timeoutTimer = 0; // heard from leader
+    node.timeoutThreshold = randomTimeout();
+
+    addEvent(`${NODE_CONFIGS[msg.to].name} accepts "${msg.value}" (ballot ${msg.ballot})`);
+
+    scheduleSend('p2b', msg.to, msg.from, msg.ballot);
+  } else {
+    addEvent(`${NODE_CONFIGS[msg.to].name} rejects p2a(${msg.ballot}) \u2014 promised ${node.promisedBallot}`);
+  }
+}
+
+function handleP2b(msg) {
+  const node = nodes[msg.to];
+  if (node.phase !== 'LEADING' || msg.ballot !== node.myBallot) return;
+  if (node.p2bFrom.has(msg.from)) return;
+
+  node.p2bFrom.add(msg.from);
+
+  // Check majority: self + responses
+  if (node.p2bFrom.size + 1 >= MAJORITY) {
+    node.decidedValue = node.acceptedValue;
+    node.phase = 'DECIDED';
+
+    addEvent(`\uD83C\uDF89 ${NODE_CONFIGS[msg.to].name} decides "${node.decidedValue}" \u2014 Consensus!`);
+
+    // Send p3 to all others
+    for (let i = 0; i < 3; i++) {
+      if (i !== msg.to) {
+        scheduleSend('p3', msg.to, i, node.myBallot, node.decidedValue);
+      }
+    }
+
+    checkSafety(node.decidedValue);
+    checkRoundEnd();
+  }
+}
+
+function handleP3(msg) {
+  const node = nodes[msg.to];
+  if (!node.decidedValue) {
+    node.decidedValue = msg.value;
+    node.phase = 'DECIDED';
+    addEvent(`${NODE_CONFIGS[msg.to].name} learns decided value "${msg.value}"`);
+  }
+  checkSafety(msg.value);
+  checkRoundEnd();
+}
+
+// ============================================================
+// SAFETY CHECK
+// ============================================================
+function checkSafety(newValue) {
+  const decidedValues = nodes
+    .filter(n => n.decidedValue)
+    .map(n => n.decidedValue);
+
+  const unique = [...new Set(decidedValues)];
+  if (unique.length > 1) {
+    safetyViolated = true;
+    addEvent(`\u26A0\uFE0F SAFETY VIOLATED! Values: ${unique.join(', ')}`);
+  }
+
+  if (roundDecidedValue === null) {
+    roundDecidedValue = newValue;
+  } else if (roundDecidedValue !== newValue) {
+    safetyViolated = true;
+  }
+
+  updateSafetyDisplay();
+}
+
+function updateSafetyDisplay() {
+  if (safetyViolated) {
+    dom.safetyStatus.className = 'safety-status violated';
+    dom.safetyStatus.textContent = '\uD83C\uDFC6 YOU WIN! SAFETY VIOLATED!';
+  } else {
+    dom.safetyStatus.className = 'safety-status safe';
+    dom.safetyStatus.textContent = '\u2713 SAFETY HOLDS';
+  }
+
+  // Show decided values
+  const decided = nodes.filter(n => n.decidedValue);
+  if (decided.length === 0) {
+    dom.decidedList.innerHTML = '<div style="color:#555;font-size:0.78rem;">No decisions yet this round.</div>';
+  } else {
+    dom.decidedList.innerHTML = decided.map(n => {
+      const cfg = NODE_CONFIGS[n.id];
+      return `<div class="decided-item" style="background:${cfg.color}22;color:${cfg.light};">
+        ${cfg.name}: "${n.decidedValue}"
+      </div>`;
+    }).join('');
+  }
+}
+
+// ============================================================
+// ROUND MANAGEMENT
+// ============================================================
+function checkRoundEnd() {
+  // Round ends when at least one node has decided
+  // and either all alive nodes have decided or enough time has passed
+  const decidedCount = nodes.filter(n => n.decidedValue).length;
+  if (decidedCount > 0 && roundEndTime === null) {
+    roundEndTime = gameTime + ROUND_END_DELAY;
+    showBanner();
+  }
+}
+
+function showBanner() {
+  const value = roundDecidedValue || '?';
+  const cfg = NODE_CONFIGS.find(c => c.value === value);
+  dom.bannerTitle.textContent = `Round ${roundNum} Complete!`;
+  dom.bannerValue.textContent = `Decided: "${value}"`;
+  dom.bannerValue.style.color = cfg ? cfg.light : '#fff';
+  dom.bannerScore.textContent = roundScore > 0
+    ? `Score: ${roundScore} extra message${roundScore !== 1 ? 's' : ''} caused!`
+    : 'No extra messages this round.';
+  dom.roundBanner.classList.add('visible');
+
+  if (bannerTimeout) clearTimeout(bannerTimeout);
+  bannerTimeout = setTimeout(() => {
+    dom.roundBanner.classList.remove('visible');
+  }, ROUND_END_DELAY * 0.8 / speed);
+}
+
+function newRound() {
+  // Update top score from previous round
+  if (roundScore > topScore) {
+    topScore = roundScore;
+    updateScoreDisplay();
+  }
+
+  roundEndTime = null;
+  roundDecidedValue = null;
+  safetyViolated = false;
+  roundMsgCount = 0;
+  roundScore = 0;
+
+  // Clear in-flight messages
+  for (const inflight of inflightMessages) {
+    if (inflight.element) inflight.element.remove();
+  }
+  inflightMessages = [];
+  pendingActions = [];
+
+  // Reset nodes
+  for (const node of nodes) {
+    resetNode(node);
+  }
+
+  // Clear logs
+  for (const lc of dom.logContents) {
+    lc.innerHTML = '';
+  }
+
+  updateSafetyDisplay();
+
+  roundNum++;
+  dom.roundNum.textContent = roundNum;
+
+  addEvent(`\u2500\u2500\u2500 Round ${roundNum} begins \u2500\u2500\u2500`);
+
+  // Random node starts first
+  const starter = Math.floor(Math.random() * 3);
+  const startDelay = 1500 + Math.random() * 1500;
+  pendingActions.push({
+    time: gameTime + startDelay,
+    action: () => startProposal(starter),
+  });
+
+  // Give other nodes staggered timeouts
+  for (let i = 0; i < 3; i++) {
+    if (i !== starter) {
+      nodes[i].timeoutThreshold = 25000 + Math.random() * 15000;
+    }
+  }
+}
+
+// ============================================================
+// MESSAGE SYSTEM
+// ============================================================
+function sendMessage(type, from, to, ballot, value, accBallot, accValue) {
+  const msg = { type, from, to, ballot, value: value || null, accBallot: accBallot || 0, accValue: accValue || null, id: msgIdCounter++ };
+
+  // Track message count for scoring
+  roundMsgCount++;
+  roundScore = Math.max(0, roundMsgCount - 5);
+  updateScoreDisplay();
+
+  const inflight = {
+    msg,
+    startTime: gameTime,
+    arriveTime: gameTime + TRAVEL_TIME,
+    element: null,
+  };
+
+  // Create flying element
+  inflight.element = createFlyingElement(msg);
+  inflightMessages.push(inflight);
+
+  // Add to sender's lane
+  addLaneEntry(from, msg);
+
+  return msg;
+}
+
+function scheduleSend(type, from, to, ballot, value, accBallot, accValue) {
+  pendingActions.push({
+    time: gameTime + PROCESS_DELAY,
+    action: () => {
+      const node = nodes[from];
+      if (!node.alive) return;
+      if (node.delayed) {
+        // Queue for when un-delayed
+        node.messageBuffer.push({ type: '_send', sendType: type, from, to, ballot, value, accBallot, accValue });
+        return;
+      }
+      sendMessage(type, from, to, ballot, value, accBallot, accValue);
+    },
+  });
+}
+
+function createFlyingElement(msg) {
+  const el = document.createElement('div');
+  const owner = ballotOwner(msg.ballot);
+  const cfg = NODE_CONFIGS[owner];
+  el.className = `flying-msg ${cfg.msgClass}`;
+  el.textContent = formatMsgShort(msg);
+
+  // Vertical position: distribute across animation area
+  const row = (msg.id % 4);
+  el.style.top = (15 + row * 28) + 'px';
+
+  dom.animArea.appendChild(el);
+  return el;
+}
+
+function addLaneEntry(nodeId, msg) {
+  const lc = dom.logContents[nodeId];
+  const entry = document.createElement('div');
+  const owner = ballotOwner(msg.ballot);
+  const cfg = NODE_CONFIGS[owner];
+  entry.className = `log-entry ${cfg.logClass}`;
+  entry.textContent = formatMsgForLane(msg);
+  lc.appendChild(entry);
+  lc.scrollTop = lc.scrollHeight;
+}
+
+// ============================================================
+// SCORE DISPLAY
+// ============================================================
+function updateScoreDisplay() {
+  if (dom.roundScoreDisplay) dom.roundScoreDisplay.textContent = roundScore;
+  if (dom.topScoreDisplay) dom.topScoreDisplay.textContent = topScore;
+}
+
+// ============================================================
+// EVENT LOG
+// ============================================================
+function addEvent(text) {
+  const entry = document.createElement('div');
+  entry.className = 'event-entry';
+  entry.innerHTML = `<span class="time">${formatTime(gameTime)}</span>${text}`;
+  dom.eventLog.appendChild(entry);
+  dom.eventLog.scrollTop = dom.eventLog.scrollHeight;
+}
+
+// ============================================================
+// GAME LOOP
+// ============================================================
+function gameLoop(timestamp) {
+  if (!running) return;
+
+  if (lastTimestamp === null) lastTimestamp = timestamp;
+  const realDt = timestamp - lastTimestamp;
+  lastTimestamp = timestamp;
+  const dt = Math.min(realDt, 100) * speed; // cap dt to prevent huge jumps
+  gameTime += dt;
+
+  update(dt);
+  render();
+
+  requestAnimationFrame(gameLoop);
+}
+
+function update(dt) {
+  // Process pending actions
+  const readyActions = [];
+  pendingActions = pendingActions.filter(a => {
+    if (gameTime >= a.time) {
+      readyActions.push(a);
+      return false;
+    }
+    return true;
+  });
+  for (const a of readyActions) {
+    a.action();
+  }
+
+  // Deliver in-flight messages
+  const delivered = [];
+  inflightMessages = inflightMessages.filter(inflight => {
+    if (gameTime >= inflight.arriveTime) {
+      delivered.push(inflight);
+      return false;
+    }
+    return true;
+  });
+  for (const inflight of delivered) {
+    const target = nodes[inflight.msg.to];
+    if (!target.alive) {
+      // Message dropped
+      if (inflight.element) {
+        inflight.element.classList.add('dropped');
+        setTimeout(() => inflight.element.remove(), 500);
+      }
+    } else {
+      if (inflight.element) inflight.element.remove();
+      processMessage(inflight.msg);
+    }
+  }
+
+  // Update timeouts
+  for (const node of nodes) {
+    if (!node.alive || node.delayed || node.phase === 'DECIDED') continue;
+
+    // Only timeout if IDLE or stuck in PREPARING/LEADING
+    node.timeoutTimer += dt;
+    if (node.timeoutTimer >= node.timeoutThreshold) {
+      // If preparing/leading, step down first
+      if (node.phase === 'LEADING' || node.phase === 'PREPARING') {
+        addEvent(`${NODE_CONFIGS[node.id].name} timed out as ${node.phase.toLowerCase()}, retrying...`);
+        node.phase = 'IDLE';
+      }
+      startProposal(node.id);
+    }
+  }
+
+  // Check round end
+  if (roundEndTime && gameTime >= roundEndTime) {
+    newRound();
+  }
+}
+
+function render() {
+  renderNodes();
+  renderFlyingMessages();
+}
+
+function renderNodes() {
+  for (let i = 0; i < 3; i++) {
+    const node = nodes[i];
+    const box = dom.nodeBoxes[i];
+    const crown = dom.crowns[i];
+    const overlay = dom.overlays[i];
+    const info = dom.nodeInfos[i];
+
+    // Dead state
+    box.classList.toggle('dead', !node.alive);
+    overlay.classList.toggle('visible', !node.alive);
+
+    // Delayed state
+    box.classList.toggle('delayed', node.delayed);
+
+    // Crown (visible when LEADING)
+    crown.classList.toggle('visible', node.phase === 'LEADING');
+
+    // Info text
+    let infoText = '';
+    if (!node.alive) {
+      infoText = 'DOWN';
+    } else if (node.phase === 'DECIDED') {
+      infoText = `Decided: "${node.decidedValue}"`;
+    } else if (node.phase === 'LEADING') {
+      infoText = `Leader B:${node.myBallot}\nVal: "${node.acceptedValue}"`;
+    } else if (node.phase === 'PREPARING') {
+      infoText = `Preparing B:${node.myBallot}`;
+    } else {
+      if (node.acceptedValue) {
+        infoText = `Idle\nAcc: "${node.acceptedValue}" @${node.acceptedBallot}`;
+      } else {
+        infoText = 'Idle';
+      }
+    }
+    if (node.delayed && node.alive) {
+      infoText = 'DELAYED\n' + infoText;
+    }
+    info.textContent = infoText;
+    info.style.whiteSpace = 'pre-line';
+  }
+}
+
+function renderFlyingMessages() {
+  for (const inflight of inflightMessages) {
+    const progress = Math.max(0, Math.min(1, (gameTime - inflight.startTime) / TRAVEL_TIME));
+    const startX = getColumnCenterPct(inflight.msg.from);
+    const endX = getColumnCenterPct(inflight.msg.to);
+    const x = lerp(startX, endX, easeInOut(progress));
+
+    inflight.element.style.left = x + '%';
+    inflight.element.style.opacity = progress > 0.85 ? ((1 - progress) / 0.15) : 1;
+  }
+}
+
+// ============================================================
+// GAME CONTROL
+// ============================================================
+function startGame() {
+  dom.welcomeOverlay.style.display = 'none';
+
+  nodes = [createNode(0), createNode(1), createNode(2)];
+  inflightMessages = [];
+  pendingActions = [];
+  gameTime = 0;
+  lastTimestamp = null;
+  roundNum = 0;
+  roundDecidedValue = null;
+  roundEndTime = null;
+  safetyViolated = false;
+  msgIdCounter = 0;
+  roundMsgCount = 0;
+  roundScore = 0;
+  topScore = 0;
+  updateScoreDisplay();
+
+  running = true;
+  newRound();
+  requestAnimationFrame(gameLoop);
+}
+
+function resetGame() {
+  running = false;
+
+  // Clear flying messages
+  for (const inflight of inflightMessages) {
+    if (inflight.element) inflight.element.remove();
+  }
+  inflightMessages = [];
+  pendingActions = [];
+
+  // Clear logs
+  for (const lc of dom.logContents) {
+    lc.innerHTML = '';
+  }
+  dom.eventLog.innerHTML = '';
+  dom.roundBanner.classList.remove('visible');
+
+  // Reset state
+  nodes = [createNode(0), createNode(1), createNode(2)];
+  gameTime = 0;
+  lastTimestamp = null;
+  roundNum = 0;
+  roundDecidedValue = null;
+  roundEndTime = null;
+  safetyViolated = false;
+  msgIdCounter = 0;
+  roundMsgCount = 0;
+  roundScore = 0;
+  topScore = 0;
+  updateScoreDisplay();
+
+  updateSafetyDisplay();
+  renderNodes();
+  dom.roundNum.textContent = '0';
+
+  running = true;
+  newRound();
+  requestAnimationFrame(gameLoop);
+}
+
+// ============================================================
+// SPEED CONTROL
+// ============================================================
+const SPEEDS = [0.5, 1, 1.5, 2, 3, 5];
+let speedIndex = 1;
+
+function setSpeed(idx) {
+  speedIndex = Math.max(0, Math.min(SPEEDS.length - 1, idx));
+  speed = SPEEDS[speedIndex];
+  dom.speedDisplay.textContent = speed + 'x';
+}
+
+// ============================================================
+// INITIALIZATION
+// ============================================================
+function init() {
+  buildUI();
+
+  document.getElementById('startBtn').addEventListener('click', startGame);
+  document.getElementById('resetBtn').addEventListener('click', resetGame);
+  document.getElementById('speedDown').addEventListener('click', () => setSpeed(speedIndex - 1));
+  document.getElementById('speedUp').addEventListener('click', () => setSpeed(speedIndex + 1));
+
+  updateSafetyDisplay();
+  renderNodes();
+}
+
+init();
+</script>
+</body>
+</html>

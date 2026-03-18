@@ -1173,6 +1173,7 @@ function handleP1b(msg) {
   if (node.p1bFrom.has(msg.from)) return;
 
   node.p1bFrom.add(msg.from);
+  node.timeoutTimer = 0; // heard back, reset timeout
   node.p1bResponses.push({
     accBallot: msg.accBallot || 0,
     accValue: msg.accValue || null,
@@ -1201,6 +1202,8 @@ function handleP1b(msg) {
     node.acceptedBallot = node.myBallot;
     node.acceptedValue = valueToPropose;
     node.p2bFrom = new Set();
+    node.timeoutTimer = 0;
+    node.timeoutThreshold = randomTimeout();
 
     addEvent(`${NODE_CONFIGS[msg.to].name} becomes leader (ballot ${node.myBallot}), proposing "${valueToPropose}"`);
 
@@ -1228,6 +1231,12 @@ function handleP2a(msg) {
   const node = nodes[msg.to];
 
   if (msg.ballot >= node.promisedBallot) {
+    // Step down if we were proposing with a lower ballot
+    if ((node.phase === 'LEADING' || node.phase === 'PREPARING') && node.myBallot < msg.ballot) {
+      addEvent(`${NODE_CONFIGS[msg.to].name} steps down (saw ballot ${msg.ballot})`);
+      node.phase = 'IDLE';
+    }
+
     node.promisedBallot = msg.ballot;
     node.acceptedBallot = msg.ballot;
     node.acceptedValue = msg.value;
@@ -1248,6 +1257,7 @@ function handleP2b(msg) {
   if (node.p2bFrom.has(msg.from)) return;
 
   node.p2bFrom.add(msg.from);
+  node.timeoutTimer = 0; // heard back, reset timeout
 
   // Check majority: self + responses
   if (node.p2bFrom.size + 1 >= MAJORITY) {

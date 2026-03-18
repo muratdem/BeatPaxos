@@ -760,8 +760,8 @@ const NODE_CONFIGS = [
 
 const TRAVEL_TIME = 5000;       // ms for message to fly
 const PROCESS_DELAY = 1500;     // ms before node responds
-const TIMEOUT_MIN = 30000;
-const TIMEOUT_MAX = 54000;
+const TIMEOUT_MIN = 15000;
+const TIMEOUT_MAX = 25000;
 const ROUND_END_DELAY = 6000;
 const MAJORITY = 2;             // out of 3
 
@@ -1107,11 +1107,20 @@ function startProposal(nodeId) {
 
   addEvent(`${NODE_CONFIGS[nodeId].name} starts proposal with ballot ${node.myBallot}`);
 
-  for (let i = 0; i < 3; i++) {
-    if (i !== nodeId) {
-      sendMessage('p1a', nodeId, i, node.myBallot);
-    }
-  }
+  const others = [0, 1, 2].filter(i => i !== nodeId);
+  sendMessage('p1a', nodeId, others[0], node.myBallot);
+  pendingActions.push({
+    time: gameTime + 2000,
+    action: () => {
+      const n = nodes[nodeId];
+      if (!n.alive) return;
+      if (n.delayed) {
+        n.messageBuffer.push({ type: '_send', sendType: 'p1a', from: nodeId, to: others[1], ballot: n.myBallot });
+        return;
+      }
+      sendMessage('p1a', nodeId, others[1], n.myBallot);
+    },
+  });
 }
 
 function processMessage(msg) {
@@ -1195,12 +1204,23 @@ function handleP1b(msg) {
 
     addEvent(`${NODE_CONFIGS[msg.to].name} becomes leader (ballot ${node.myBallot}), proposing "${valueToPropose}"`);
 
-    // Send p2a to all others
-    for (let i = 0; i < 3; i++) {
-      if (i !== msg.to) {
-        scheduleSend('p2a', msg.to, i, node.myBallot, valueToPropose);
-      }
-    }
+    // Send p2a to others with stagger
+    const p2aOthers = [0, 1, 2].filter(i => i !== msg.to);
+    scheduleSend('p2a', msg.to, p2aOthers[0], node.myBallot, valueToPropose);
+    const leaderId = msg.to;
+    const leaderBallot = node.myBallot;
+    pendingActions.push({
+      time: gameTime + PROCESS_DELAY + 2000,
+      action: () => {
+        const n = nodes[leaderId];
+        if (!n.alive) return;
+        if (n.delayed) {
+          n.messageBuffer.push({ type: '_send', sendType: 'p2a', from: leaderId, to: p2aOthers[1], ballot: leaderBallot, value: valueToPropose });
+          return;
+        }
+        sendMessage('p2a', leaderId, p2aOthers[1], leaderBallot, valueToPropose);
+      },
+    });
   }
 }
 
@@ -1324,9 +1344,10 @@ function showBanner() {
   dom.bannerTitle.textContent = `Round ${roundNum} Complete!`;
   dom.bannerValue.textContent = `Decided: "${value}"`;
   dom.bannerValue.style.color = cfg ? cfg.light : '#fff';
+  const isNewTopScore = roundScore > topScore;
   dom.bannerScore.textContent = roundScore > 0
-    ? `Score: ${roundScore} extra message${roundScore !== 1 ? 's' : ''} caused!`
-    : 'No extra messages this round.';
+    ? `Score: ${roundScore}${isNewTopScore ? ' — New high score!' : ''}`
+    : '';
   dom.roundBanner.classList.add('visible');
 
   if (bannerTimeout) clearTimeout(bannerTimeout);
@@ -1383,7 +1404,7 @@ function newRound() {
   // Give other nodes staggered timeouts
   for (let i = 0; i < 3; i++) {
     if (i !== starter) {
-      nodes[i].timeoutThreshold = 25000 + Math.random() * 15000;
+      nodes[i].timeoutThreshold = 15000 + Math.random() * 10000;
     }
   }
 }

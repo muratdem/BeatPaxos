@@ -18,12 +18,13 @@ Single file app: `index.html` — all HTML, CSS, and JS inline. Deployed on GitH
 - Double-click: kill/recover a node (only one down at a time)
 - Click & hold: delay a node's message processing
 - Score: max(0, messages_sent - 5) per round; first 5 are "free" (normal Paxos)
-- Timeouts (30-54s) trigger new proposals when leader is unresponsive
+- Timeouts (15-25s) trigger new proposals when leader is unresponsive
 - After consensus, new round auto-starts
 
 ## Timing (at 1x speed)
 
 - Message travel: 5000ms
 - Process delay: 1500ms
-- Leader timeout: 30000-54000ms
+- Leader timeout: 15000-25000ms
+- Leader message stagger: 2000ms between sends to each follower
 - Round end delay: 6000ms
